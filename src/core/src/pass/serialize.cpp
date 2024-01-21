@@ -1247,35 +1247,19 @@ bool pass::Serialize::run_on_model(const std::shared_ptr<ov::Model>& model) {
     return false;
 }
 
-OPENVINO_SUPPRESS_DEPRECATED_START
-pass::Serialize::Serialize(std::ostream& xmlFile,
-                           std::ostream& binFile,
-                           std::map<std::string, ngraph::OpSet> custom_opsets,
-                           pass::Serialize::Version version)
+pass::Serialize::Serialize(std::ostream& xmlFile, std::ostream& binFile, pass::Serialize::Version version)
     : m_xmlFile{&xmlFile},
       m_binFile{&binFile},
       m_xmlPath{},
       m_binPath{},
-      m_version{version},
-      m_custom_opsets{custom_opsets} {}
+      m_version{version} {}
 
-pass::Serialize::Serialize(std::ostream& xmlFile, std::ostream& binFile, pass::Serialize::Version version)
-    : pass::Serialize::Serialize(xmlFile, binFile, std::map<std::string, ngraph::OpSet>{}, version) {}
-
-pass::Serialize::Serialize(const std::string& xmlPath,
-                           const std::string& binPath,
-                           std::map<std::string, ngraph::OpSet> custom_opsets,
-                           pass::Serialize::Version version)
+pass::Serialize::Serialize(const std::string& xmlPath, const std::string& binPath, pass::Serialize::Version version)
     : m_xmlFile{nullptr},
       m_binFile{nullptr},
       m_xmlPath{valid_xml_path(xmlPath)},
       m_binPath{provide_bin_path(xmlPath, binPath)},
-      m_version{version},
-      m_custom_opsets{custom_opsets} {}
-
-pass::Serialize::Serialize(const std::string& xmlPath, const std::string& binPath, pass::Serialize::Version version)
-    : pass::Serialize::Serialize(xmlPath, binPath, std::map<std::string, ngraph::OpSet>{}, version) {}
-OPENVINO_SUPPRESS_DEPRECATED_END
+      m_version{version} {}
 
 OPENVINO_SUPPRESS_DEPRECATED_START
 pass::StreamSerialize::StreamSerialize(std::ostream& stream,
