@@ -7,12 +7,13 @@
 #include "implementation_map.hpp"
 
 #include "impls/ocl/kernel_selector_helper.h"
-
 #include <oneapi/dnnl/dnnl.hpp>
 
 #include <algorithm>
 #include <memory>
 #include <cmath>
+#include <chrono>
+using namespace std::chrono;
 namespace cldnn {
 namespace onednn {
 
@@ -28,6 +29,9 @@ private:
     dnnl::memory::data_type _ds_data_type;
     dnnl::memory::data_type _dzp_data_type;
 
+    std::chrono::microseconds total;
+    int64_t iter = 0;
+
     static std::vector<int64_t> reshape_to_2d(const ov::PartialShape& shape, int64_t feature) {
         auto staticShape = shape.to_shape();
         size_t total =
@@ -40,6 +44,32 @@ protected:
     std::unique_ptr<primitive_impl> clone() const override {
         return make_unique<fully_connected_onednn>(*this);
     }
+
+    // event::ptr execute_impl(const std::vector<event::ptr>& events,
+    //                         typed_primitive_inst<fully_connected>& instance) override {
+    //     auto event = parent::execute_impl(events, instance);
+    //     if (instance.get_size() != 1) {
+    //         auto start = high_resolution_clock::now();
+
+    //         auto& network = instance.get_network();
+    //         auto& stream = network.get_stream();
+    //         stream.finish();
+    //         auto& output_memory = instance.output_memory();
+    //         auto send_ptr = output_memory.buffer_ptr();
+    //         if (output_memory.get_layout().data_type == ov::element::f16)
+    //             Messenger::getInstance().helperAllreducef16(send_ptr, send_ptr, output_memory.count());
+    //         else if (output_memory.get_layout().data_type == ov::element::f32)
+    //             Messenger::getInstance().helperAllreduce(send_ptr, send_ptr, output_memory.count());
+    //         else
+    //             OPENVINO_THROW("not expected!");
+    //         auto end = high_resolution_clock::now();
+    //         total = total + duration_cast<microseconds>(end - start);
+    //         iter = iter + 1;
+    //         if (iter == 9999)
+    //             std::cout << "CCL time: " << total.count() << std::endl;
+    //     }
+    //     return event;
+    // }
 
     std::unordered_map<int, dnnl::memory> get_arguments(fully_connected_inst& instance) const override {
         std::unordered_map<int, dnnl::memory> args = parent::get_arguments(instance);

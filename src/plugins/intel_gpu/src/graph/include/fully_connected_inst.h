@@ -6,7 +6,7 @@
 #include "intel_gpu/primitives/fully_connected.hpp"
 #include "primitive_inst.h"
 #include "data_inst.h"
-
+#include "intel_gpu/graph/ccl_messenger.hpp"
 #include <string>
 #include <memory>
 
@@ -64,6 +64,21 @@ public:
     memory::ptr bias_memory() const { return dep_memory_ptr(2); }
 
     bool bias_term() const { return _impl_params->bias_layout.has_value(); }
+
+    int64_t get_rank() {
+        if (getenv("ENABLE_CCL"))
+            w_rank = cldnn::Messenger::getInstance().getRank();
+        return w_rank;
+    }
+    int64_t get_size() {
+        if (getenv("ENABLE_CCL"))
+            w_size = cldnn::Messenger::getInstance().getSize();
+        return w_size;
+    }
+
+    private:
+        int64_t w_rank{0};
+        int64_t w_size{1};
 };
 
 using fully_connected_inst = typed_primitive_inst<fully_connected>;
