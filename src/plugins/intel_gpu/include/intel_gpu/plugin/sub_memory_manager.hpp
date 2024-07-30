@@ -16,19 +16,25 @@ class SubMemoryManager {
 public:
     using ptr = std::shared_ptr<SubMemoryManager>;
     using cptr = const std::shared_ptr<SubMemoryManager>;
+    struct mem_with_flag {
+        void* mem;
+        bool ready_flag;
+    };
     struct MemoryInfo {
-        void* send_buf;
+        std::vector<mem_with_flag> recv_buf;
         std::shared_ptr<void> buf;
-        bool flag;
         bool last_used;
     };
 
     SubMemoryManager(int num_sub_streams) {
         assert(num_sub_streams);
-         _num_sub_streams = num_sub_streams;
+        _num_sub_streams = num_sub_streams;
         MemoryInfo memory_info;
-        memory_info.flag = false;
         memory_info.last_used = false;
+        mem_with_flag tp_mem;
+        tp_mem.mem = nullptr;
+        tp_mem.ready_flag = false;
+        memory_info.recv_buf.assign(_num_sub_streams, tp_mem);
         std::vector<MemoryInfo> memorys;
         memorys.assign(_num_sub_streams, memory_info);
         _memorys_table.assign(2, memorys);

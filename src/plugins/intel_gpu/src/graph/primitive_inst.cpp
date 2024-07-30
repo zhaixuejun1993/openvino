@@ -2092,6 +2092,8 @@ static bool user_requesting_mem_reuse_false(const program_node& node) {
             if (user_requesting_mem_reuse_false(*user)) {
                 return true;
             }
+        } else if (user->is_type<sync_tensor>()) {
+            return true;
         }
     }
     return false;
@@ -2134,7 +2136,6 @@ memory::ptr primitive_inst::allocate_output(engine& _engine,
     // execution with other nodes) at the cost of tiny increase in memory consumption.
     if (_node.is_in_shape_of_subgraph())
         reusable_across_network = false;
-
     // For outputs, cpu prim we want to have lockable alloc type
     // Also if the successor of a node is an cpu, then memory needs to be lockable.
     bool is_cpu = _node.get_selected_impl() ? _node.get_selected_impl()->is_cpu() :

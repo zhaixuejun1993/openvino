@@ -1126,7 +1126,7 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
         }
 
         // Dump input buffers of 'inst'
-        GPU_DEBUG_IF(debug_config->dump_layers_path.length() > 0) {
+        GPU_DEBUG_IF(debug_config->dump_layers_path.length() > 0 && net_id != 0) {
             const std::string layer_name = inst->id();
 
             GPU_DEBUG_IF(debug_config->is_target_iteration(curr_iter) &&
@@ -1170,7 +1170,7 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
             get_stream().flush();
 
         // Dump output buffers of 'inst'
-        GPU_DEBUG_IF(debug_config->dump_layers_path.length() > 0) {
+        GPU_DEBUG_IF(debug_config->dump_layers_path.length() > 0 && net_id != 0) {
             get_stream().finish();
             const std::string layer_name = inst->id();
             auto prog_id = ((get_program() != nullptr) ? get_program()->get_id() : 0);
