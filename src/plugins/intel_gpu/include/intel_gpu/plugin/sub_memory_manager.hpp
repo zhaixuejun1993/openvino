@@ -18,12 +18,14 @@ public:
     using cptr = const std::shared_ptr<SubMemoryManager>;
     struct mem_with_flag {
         void* mem;
+        size_t mem_size;
         bool ready_flag;
     };
     struct MemoryInfo {
         std::vector<mem_with_flag> recv_buf;
         std::shared_ptr<void> buf;
         bool last_used;
+        bool flag;
     };
 
     SubMemoryManager(int num_sub_streams) {
@@ -31,9 +33,10 @@ public:
         _num_sub_streams = num_sub_streams;
         MemoryInfo memory_info;
         memory_info.last_used = false;
+        memory_info.flag = false;
         mem_with_flag tp_mem;
         tp_mem.mem = nullptr;
-        tp_mem.ready_flag = false;
+        tp_mem.mem_size = 0;;
         memory_info.recv_buf.assign(_num_sub_streams, tp_mem);
         std::vector<MemoryInfo> memorys;
         memorys.assign(_num_sub_streams, memory_info);
