@@ -18,7 +18,7 @@
 #include "intel_gpu/runtime/compilation_context.hpp"
 #include "intel_gpu/runtime/debug_configuration.hpp"
 #include "intel_gpu/runtime/itt.hpp"
-
+#include "intel_gpu/primitives/slice.hpp"
 #include "intel_gpu/graph/program.hpp"
 #include "intel_gpu/graph/network.hpp"
 #include "intel_gpu/graph/serialization/map_serializer.hpp"
@@ -469,6 +469,20 @@ network::~network() {
             }
             GPU_DEBUG_COUT << "Network[" << net_id << "] First infer total concat host time: " << first << resolution << std::endl;
             GPU_DEBUG_COUT << "Network[" << net_id << "] total concat avg host time: " << avg << resolution << std::endl;
+        }
+        if (tp_host_times["slice"].size() >= 2) {
+            double first = static_cast<double>(tp_host_times["slice"][0]);
+            double avg = static_cast<double>(
+                std::accumulate(tp_host_times["slice"].begin() + 1, tp_host_times["slice"].end(), (size_t)0, std::plus<size_t>()));
+            avg /= (tp_host_times["slice"].size() - 1);
+            std::string resolution = " us";
+            if (avg > 1000.0) {
+                resolution = " ms";
+                avg /= 1000.0;
+                first /= 1000.0;
+            }
+            GPU_DEBUG_COUT << "Network[" << net_id << "] First infer total slice host time: " << first << resolution << std::endl;
+            GPU_DEBUG_COUT << "Network[" << net_id << "] total slice avg host time: " << avg << resolution << std::endl;
         }
     }
     if (_program != nullptr)
@@ -1055,11 +1069,13 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
     std::map<std::string, std::vector<int64_t>> tp_host_times_each_iter;
     tp_host_times["sync_tensor"];
     tp_host_times["concat"];
+    tp_host_times["slice"];
     tp_host_times_each_iter["sync_tensor"];
     tp_host_times_each_iter["concat"];
+    tp_host_times_each_iter["slice"];
     for (auto& inst : _exec_order) {
         auto start = std::chrono::high_resolution_clock::now();
-        if (inst->get_node().is_type<sync_tensor>() || inst->get_node().is_type<concatenation>()) {
+        if (inst->get_node().is_type<sync_tensor>() || inst->get_node().is_type<concatenation>() || inst->get_node().is_type<slice>()) {
             start = std::chrono::high_resolution_clock::now();
         }
         // Load binary dump for input layers
@@ -1206,13 +1222,18 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
                 }
             }
         }
-        if (inst->get_node().is_type<sync_tensor>() || inst->get_node().is_type<concatenation>()) {
+        if (inst->get_node().is_type<sync_tensor>() || inst->get_node().is_type<concatenation>() || inst->get_node().is_type<slice>()) {
             auto end = std::chrono::high_resolution_clock::now();
             GPU_DEBUG_IF(debug_configuration::get_instance()->host_time_profiling) {
                 if (inst->get_node().is_type<sync_tensor>()) {
-                    tp_host_times_each_iter["sync_tensor"].push_back(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
+                    tp_host_times_each_iter["sync_tensor"].push_back(
+                        std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
+                } else if (inst->get_node().is_type<slice>()) {
+                    tp_host_times_each_iter["slice"].push_back(
+                        std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
                 } else {
-                    tp_host_times_each_iter["concat"].push_back(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
+                    tp_host_times_each_iter["concat"].push_back(
+                        std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
                 }
             }
         }
@@ -1228,6 +1249,11 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
             const auto begin = std::begin(tp_host_times_each_iter["concat"]);
             const auto end = std::end(tp_host_times_each_iter["concat"]);
             tp_host_times["concat"].push_back(std::accumulate(begin, end, (size_t)0, std::plus<size_t>()));
+        }
+        if (tp_host_times_each_iter["slice"].size() >= 1) {
+            const auto begin = std::begin(tp_host_times_each_iter["slice"]);
+            const auto end = std::end(tp_host_times_each_iter["slice"]);
+            tp_host_times["slice"].push_back(std::accumulate(begin, end, (size_t)0, std::plus<size_t>()));
         }
     }
     // print '-data_shape' option for benchmark_app
