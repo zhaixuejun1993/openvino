@@ -114,6 +114,27 @@ TEST(RegisterPluginTests, registerExistingPluginThrows) {
                  ov::Exception);
 }
 
+#    if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+TEST(RegisterPluginTests, registerExistingPluginWithSymlink) {
+    ov::Core core;
+    auto plugin = std::make_shared<ov::test::utils::MockPlugin>();
+    std::shared_ptr<ov::IPlugin> base_plugin = plugin;
+    std::shared_ptr<void> m_so;
+    mockPlugin(core, base_plugin, m_so);
+    std::string libraryPath = ov::test::utils::get_mock_engine_path();
+
+    fs::create_directory("test_link");
+
+    std::string NameSymlink = "test_link/test_symlink";
+    fs::create_symlink(libraryPath, NameSymlink);
+
+    std::string mock_plugin_name{"MOCK_HARDWARE"};
+    ASSERT_THROW(core.register_plugin(NameSymlink, mock_plugin_name), ov::Exception);
+    fs::remove_all("test_link");
+    ASSERT_FALSE(ov::util::directory_exists("test_link"));
+}
+#endif
+
 inline std::string getPluginFile() {
     std::string filePostfix{"mock_engine_valid.xml"};
     std::string filename = ov::test::utils::generateTestFilePrefix() + "_" + filePostfix;
