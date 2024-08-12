@@ -2132,17 +2132,15 @@ memory::ptr primitive_inst::allocate_output(engine& _engine,
     bool is_cpu = _node.get_selected_impl() ? _node.get_selected_impl()->is_cpu() :
                                               _node.get_preferred_impl_type() == impl_types::cpu;
     auto use_lockable_memory =
-        is_output_buffer || is_cpu ||
-        has_any_cpu_user_not_shape_of(_node.get_users()) ||
+        is_output_buffer || is_cpu || has_any_cpu_user_not_shape_of(_node.get_users()) ||
         !_engine.supports_allocation(allocation_type::usm_device) ||
-        (_node.is_shape_infer_dep() && _engine.get_device_info().dev_type == device_type::integrated_gpu) ||
-        // lockable memory for FC is TP enabled, as we need to do allreduce/allgather for outputs, to be optimized further
-        (_node.is_type<fully_connected>() && _node.as<fully_connected>().w_size != 1);
+        (_node.is_shape_infer_dep() && _engine.get_device_info().dev_type == device_type::integrated_gpu);
     const auto& lockable_mem_type = _engine.get_lockable_preferred_memory_allocation_type(layout.format.is_image_2d());
 
     auto alloc_type = use_lockable_memory ? lockable_mem_type
                     : !usm_device_allocatable ? lockable_mem_type : allocation_type::usm_device;
-
+    if (_node.is_type<fully_connected>())
+        alloc_type = allocation_type::usm_device;  // for test only
     if (is_internal) {
         bool is_reorder_weights = _node.is_type<reorder>() && _node.as<reorder>().get_primitive()->weights_reorder_params;
         if (_node.can_be_optimized() || is_reorder_weights) {

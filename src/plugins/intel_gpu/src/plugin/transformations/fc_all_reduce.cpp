@@ -130,7 +130,7 @@ FullyConnectedSplitInput::FullyConnectedSplitInput(size_t world_size, size_t ran
             sync_node->set_friendly_name(m_fc->get_friendly_name() + "_TP");
             copy_runtime_info(m_fc, new_fc);
             for (auto& iter : org_users) {
-                iter.second->input(iter.first).replace_source_output(sync_node->output(0));
+                iter.second->input(iter.first).replace_source_output(sync_node->output((w_rank + 1)%2));
             }
             m_fc->clear_control_dependencies();
         }

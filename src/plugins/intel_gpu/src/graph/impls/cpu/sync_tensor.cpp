@@ -59,31 +59,58 @@ struct sync_tensor_impl : public typed_primitive_impl<sync_tensor> {
             std::lock_guard<std::mutex> lock(sub_mem_mgr->_flagMutex);
             if (sub_mem_mgr->_use_count[id] == w_size) {
                 sub_mem_mgr->_use_count[id] = 0;
-                for (size_t i = 0; i < w_size; i++) {
-                    sub_mem_mgr->_memorys_table[id][i].flag = false;
-                }
             }
             if (sub_mem_mgr->_use_count[id] == 0) {
                 break;
             }
         }
-        sub_mem_mgr->_memorys_table[id][w_rank].send_buf = instance.output_memory(w_rank).buffer_ptr();
-        sub_mem_mgr->_memorys_table[id][w_rank].flag = true;
+        for (int idx = 0; idx < static_cast<int>(w_size); idx++) {
+            if (idx != w_rank) {
+                sub_mem_mgr->_memorys_table[id][w_rank].recv_buf[idx].mem =
+                    static_cast<uint8_t*>(instance.output_memory_ptr(idx)->lock(stream, mem_lock_type::write));
+                sub_mem_mgr->_memorys_table[id][w_rank].recv_buf[idx].ready_flag = false;
+            }
+        }
+        std::vector<int> copy_list(w_size, 1);
+        copy_list[w_rank] = 0;
+        // write buffer to peers
+        while (true) {
+            int copy_size = 0;
+            for (int idx = 0; idx < static_cast<int>(w_size); idx++) {
+                if (idx != w_rank && copy_list[idx] > 0 && sub_mem_mgr->_memorys_table[id][idx].recv_buf[w_rank].mem) {
+                    auto src_ptr =
+                        static_cast<uint8_t*>(instance.output_memory_ptr(w_rank)->lock(stream, mem_lock_type::read));
+                    auto dst_ptr = static_cast<uint8_t*>(sub_mem_mgr->_memorys_table[id][idx].recv_buf[w_rank].mem);
+                    std::memcpy(dst_ptr, src_ptr, instance.output_memory(w_rank).size());
+                    copy_list[idx] = 0;
+                    sub_mem_mgr->_memorys_table[id][idx].recv_buf[w_rank].ready_flag = true;
+                    instance.output_memory_ptr(w_rank)->unlock(stream);
+                }
+                copy_size += copy_list[idx];
+            }
+            if (copy_size == 0) {
+                break;
+            }
+        }
         std::vector<int> wait_list(w_size, 1);
-        wait_list[w_rank] = 0; // no need to wait for itself
+        wait_list[w_rank] = 0;  // no need to wait for itself
         while (true) {
             int wait_size = 0;
             for (int idx = 0; idx < static_cast<int>(w_size); idx++) {
-                if (idx != w_rank && wait_list[idx] > 0 && sub_mem_mgr->_memorys_table[id][idx].flag) {
-                    auto src_ptr = static_cast<uint8_t*>(sub_mem_mgr->_memorys_table[id][idx].send_buf);
-                    auto dst_ptr = instance.output_memory(idx).buffer_ptr();
-                    std::memcpy(dst_ptr, src_ptr, instance.output_memory(idx).size());
+                if (idx != w_rank && sub_mem_mgr->_memorys_table[id][w_rank].recv_buf[idx].ready_flag) {
                     wait_list[idx] = 0;
+                    instance.output_memory_ptr(idx)->unlock(stream);
                 }
                 wait_size += wait_list[idx];
             }
             if (wait_size == 0) {
                 break;
+            }
+        }
+        for (int idx = 0; idx < static_cast<int>(w_size); idx++) {
+            if (idx != w_rank) {
+                sub_mem_mgr->_memorys_table[id][w_rank].recv_buf[idx].mem = nullptr;
+                sub_mem_mgr->_memorys_table[id][w_rank].recv_buf[idx].ready_flag = false;
             }
         }
         {
@@ -95,7 +122,7 @@ struct sync_tensor_impl : public typed_primitive_impl<sync_tensor> {
             for (size_t i = 0; i < instance.outputs_memory_count(); i++)
                 input_mem_ptrs.push_back(instance.output_memory_ptr(i));
             auto output_mem_ptr = instance.output_memory_ptr();
-            cldnn::mem_lock<uint8_t, mem_lock_type::write> output_lock(output_mem_ptr, stream);
+            cldnn::mem_lock<uint8_t, mem_lock_type::write> output_lock(instance.output_memory_ptr((w_rank+1)%2), stream);
             for (size_t i = 0; i < input_mem_ptrs.size(); i++)
                 input_host_tensors.push_back(
                     make_tensor(instance.get_output_layout(), input_mem_ptrs[i]->lock(stream, mem_lock_type::read)));
