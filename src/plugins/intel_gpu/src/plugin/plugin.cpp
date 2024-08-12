@@ -187,8 +187,11 @@ std::shared_ptr<ov::ICompiledModel> Plugin::compile_model(const std::shared_ptr<
         config.register_device_context_for_tp(context);
         auto device_ptr = context->get_engine().get_device();
         for (auto& iter : m_device_map) {
-            if (iter.first != device_id && iter.second->get_info().dev_type == device_ptr->get_info().dev_type) 
+            if (iter.first != device_id && iter.second->get_info().dev_type == device_ptr->get_info().dev_type) {
+                if (config.get_context_for_tp().size() == 2)  // only profile 2 devices for now
+                    break;
                 config.register_device_context_for_tp(get_default_context(iter.first));
+            }
         }
         if (config.get_context_for_tp().size() > 1) {
             config.enableSubStreams = true;
