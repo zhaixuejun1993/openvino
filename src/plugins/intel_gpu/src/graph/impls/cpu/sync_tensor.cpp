@@ -45,11 +45,6 @@ struct sync_tensor_impl : public typed_primitive_impl<sync_tensor> {
         auto& stream = instance.get_network().get_stream();
 
         const bool pass_through_events = (stream.get_queue_type() == QueueTypes::out_of_order) && instance.get_node().is_in_shape_of_subgraph();
-        if (!pass_through_events) {
-            for (auto e : events) {
-                e->wait();
-            }
-        }
         auto sub_mem_mgr = instance.get_network().get_sub_mem_mgr();
         auto w_rank = instance.get_network().get_program()->get_config().subStreamExecConfig.get_rank()[0];
         auto w_size = instance.get_network().get_program()->get_config().get_context_for_tp().size();
