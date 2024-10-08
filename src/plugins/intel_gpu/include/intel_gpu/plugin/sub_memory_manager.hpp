@@ -23,6 +23,8 @@ public:
         bool last_used;
         std::shared_ptr<cldnn::stream> stream_ptr;
         std::vector<cldnn::memory::ptr> recv_bufs;
+        std::vector<bool> recv_flag;
+        std::vector<bool> add_flag;
         std::vector<cldnn::event::ptr> events;
         cldnn::memory::ptr output;
         cldnn::layout layout;
@@ -36,6 +38,8 @@ public:
         memory_info.last_used = false;
         memory_info.layout = cldnn::layout();
         memory_info.recv_bufs.assign(_num_sub_streams, nullptr);
+        memory_info.recv_flag.assign(_num_sub_streams, false);
+        memory_info.add_flag.assign(_num_sub_streams, false);
         memory_info.events.assign(_num_sub_streams, nullptr);
         std::vector<MemoryInfo> memorys;
         memorys.assign(_num_sub_streams, memory_info);
