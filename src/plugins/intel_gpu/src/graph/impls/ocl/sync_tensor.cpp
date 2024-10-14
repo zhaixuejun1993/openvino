@@ -880,16 +880,18 @@ struct sync_tensor_impl : public typed_primitive_impl<sync_tensor> {
             // }
             // all_reduce_solution = 2;
             // std::cout << "[Rank] " << w_rank << ", all_reduce_solution: " << all_reduce_solution << std::endl;
-            const char* all_reduce_add_solution = getenv("OV_TP_ALLREDUCE_ADD_solution");
-            if (all_reduce_add_solution)
-                all_reduce_solution = std::atoi(all_reduce_add_solution);
+            // const char* all_reduce_add_solution = getenv("OV_TP_ALLREDUCE_ADD_solution");
+            // if (all_reduce_add_solution)
+            //     all_reduce_solution = std::atoi(all_reduce_add_solution);
         }
-        auto start = perf_dump_start();
+        if (w_size == 2)
+            all_reduce_solution = 0;
         if (!pass_through_events) {
             for (auto e : events) {
                 e->wait();
             }
         }
+        auto start = perf_dump_start();
         perf_dump_done(start,
                        std::string("rank[") + std::to_string(w_rank) + std::string("] sync_tensor wait events"),
                        true);
