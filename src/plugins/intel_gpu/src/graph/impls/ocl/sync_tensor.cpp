@@ -884,11 +884,6 @@ struct sync_tensor_impl : public typed_primitive_impl<sync_tensor> {
             // if (all_reduce_add_solution)
             //     all_reduce_solution = std::atoi(all_reduce_add_solution);
         }
-        if (!pass_through_events) {
-            for (auto e : events) {
-                e->wait();
-            }
-        }
         auto start = perf_dump_start();
         perf_dump_done(start,
                        std::string("rank[") + std::to_string(w_rank) + std::string("] sync_tensor wait events"),
