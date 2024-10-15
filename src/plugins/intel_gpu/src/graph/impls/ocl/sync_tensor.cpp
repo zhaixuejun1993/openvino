@@ -884,8 +884,6 @@ struct sync_tensor_impl : public typed_primitive_impl<sync_tensor> {
             // if (all_reduce_add_solution)
             //     all_reduce_solution = std::atoi(all_reduce_add_solution);
         }
-        if (w_size == 2)
-            all_reduce_solution = 0;
         if (!pass_through_events) {
             for (auto e : events) {
                 e->wait();
