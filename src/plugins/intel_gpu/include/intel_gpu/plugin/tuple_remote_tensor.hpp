@@ -43,6 +43,7 @@ public:
     void set_shape(ov::Shape shape) override;
     const ov::element::Type& get_element_type() const override;
     const ov::Shape& get_shape() const override;
+    const ov::Shape& get_actual_shape() const;
     const ov::Strides& get_strides() const override;
 
     void allocate();
@@ -64,6 +65,7 @@ private:
     std::vector<ov::SoPtr<ov::IRemoteTensor>> m_ordered_tensor;
     std::map<std::string, ov::SoPtr<ov::IRemoteTensor>> m_tensors;
     std::vector<std::shared_ptr<RemoteTensorImpl>> m_remote_tensors;
+    mutable ov::Shape virtual_shape;
 };
 
 }  // namespace intel_gpu

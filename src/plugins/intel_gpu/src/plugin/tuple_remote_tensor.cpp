@@ -44,6 +44,13 @@ const ov::element::Type& TupleRemoteTensorImpl::get_element_type() const {
 }
 
 const ov::Shape& TupleRemoteTensorImpl::get_shape() const {
+    const ov::Shape& shape = m_tensors.begin()->second->get_shape();
+    virtual_shape = shape;
+    virtual_shape[1] = shape[1] * m_tensors.size();
+    return virtual_shape;
+}
+
+const ov::Shape& TupleRemoteTensorImpl::get_actual_shape() const {
     return m_tensors.begin()->second->get_shape();
 }
 
@@ -123,7 +130,7 @@ void TupleRemoteTensorImpl::copy_from(const std::shared_ptr<const ov::ITensor>& 
             i++;
         }
     } else {
-        auto new_roi_shape = get_shape();
+        auto new_roi_shape = get_actual_shape();
         new_roi_shape[0] = roi_shape[0];
         int i = 0;
         for (auto& tensor : m_remote_tensors) {
