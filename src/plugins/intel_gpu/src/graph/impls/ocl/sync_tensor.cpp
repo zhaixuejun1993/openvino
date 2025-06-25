@@ -9,7 +9,6 @@
 #include <condition_variable>
 #include <mutex>
 #include <thread>
-#include <unistd.h>
 #include "intel_gpu/runtime/error_handler.hpp"
 #include "register.hpp"
 #include "registry/implementation_map.hpp"
@@ -383,9 +382,9 @@ struct sync_tensor_impl : public typed_primitive_impl<sync_tensor> {
         sub_mem_mgr->set_memory_used(id, w_rank);
         while (true) {
             std::lock_guard<std::mutex> lock(sub_mem_mgr->_flagMutex);
-            sub_mem_mgr->updated_flag = false;
-            sub_mem_mgr->create_pipeline_done.store(false);
             if (sub_mem_mgr->_use_count[id] == w_size) {
+                sub_mem_mgr->updated_flag = false;
+                sub_mem_mgr->create_pipeline_done.store(false);
                 sub_mem_mgr->_use_count[id] = 0;
                 for (size_t i = 0; i < w_size; i++) {
                     sub_mem_mgr->_memorys_table[id][i].flag = false;
@@ -434,7 +433,6 @@ struct sync_tensor_impl : public typed_primitive_impl<sync_tensor> {
             sub_mem_mgr->rank_1_stream = &local_stream;
         }
 
-        sub_mem_mgr->_memorys_table[id][w_rank].flag = true;
         timer.measure_end(std::string("prepare for sync for local memory allocation"));
         instance.all_reduce_local_mem_alloc_times = timer.get().count();
         std::vector<cldnn::event::ptr> sync_events;
@@ -443,6 +441,8 @@ struct sync_tensor_impl : public typed_primitive_impl<sync_tensor> {
             // wait for peer memory ready
             while (true) {
                 size_t wait_all_ouput_ready = 0;
+                std::lock_guard<std::mutex> lock(sub_mem_mgr->_flagMutex);
+                sub_mem_mgr->_memorys_table[id][w_rank].flag = true;
                 for (int idx = 0; idx < static_cast<int>(w_size); idx++) {
                     if (sub_mem_mgr->_memorys_table[id][idx].flag == true)
                         wait_all_ouput_ready++;
@@ -454,7 +454,7 @@ struct sync_tensor_impl : public typed_primitive_impl<sync_tensor> {
 
             auto output_layout = instance.get_output_layout(0);
             ov::element::Type output_element_type = output_layout.data_type;
-            // std::cout << "element type: " << output_element_type.get_type_name() << ", size: " << output_element_type.size() << std::endl;
+
             auto total_size = output_layout.count();
             auto total_size_byte = output_layout.bytes_count();
 
@@ -494,7 +494,7 @@ struct sync_tensor_impl : public typed_primitive_impl<sync_tensor> {
                 cl_event unmap_events[2];
                 {
                     auto shared_buffer0 = std::dynamic_pointer_cast<const ocl::gpu_buffer>(sub_mem_mgr->_memorys_table[id][0].recv_bufs[1])->get_buffer().get();
-                    auto host_ptr0 = reinterpret_cast<cl_half*>(clEnqueueMapBuffer(local_queue,
+                    auto host_ptr0 = reinterpret_cast<char*>(clEnqueueMapBuffer(local_queue,
                                                                                    shared_buffer0,
                                                                                    CL_TRUE,
                                                                                    CL_MAP_READ | CL_MAP_WRITE,
@@ -506,7 +506,7 @@ struct sync_tensor_impl : public typed_primitive_impl<sync_tensor> {
                                                                                    &ret));
 
                     auto shared_buffer1 = std::dynamic_pointer_cast<const ocl::gpu_buffer>(sub_mem_mgr->_memorys_table[id][1].recv_bufs[1])->get_buffer().get();
-                    auto host_ptr1 = reinterpret_cast<cl_half*>(clEnqueueMapBuffer(sub_mem_mgr->rank_1_queue,
+                    auto host_ptr1 = reinterpret_cast<char*>(clEnqueueMapBuffer(sub_mem_mgr->rank_1_queue,
                                                                                    shared_buffer1,
                                                                                    CL_TRUE,
                                                                                    CL_MAP_READ | CL_MAP_WRITE,
@@ -516,7 +516,7 @@ struct sync_tensor_impl : public typed_primitive_impl<sync_tensor> {
                                                                                    &copy_events[1],
                                                                                    &map_events[1],
                                                                                    &ret));
-                    for (size_t i = 0; i < (total_size_byte / output_element_type.size()); i++) {
+                    for (size_t i = 0; i < total_size_byte; i++) {
                         auto tmp = host_ptr0[i];
                         host_ptr0[i] = host_ptr1[i];
                         host_ptr1[i] = tmp;
