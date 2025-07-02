@@ -29,6 +29,7 @@ public:
         std::vector<void*> remote_mems;
         cldnn::memory::ptr output;
         cldnn::layout layout;
+        void* host_ptr;
     };
 
     SubMemoryManager(int num_sub_streams) {
@@ -42,6 +43,7 @@ public:
         memory_info.layout = cldnn::layout();
         memory_info.recv_bufs.assign(_num_sub_streams, nullptr);
         memory_info.remote_mems.assign(_num_sub_streams, nullptr);
+        memory_info.host_ptr = nullptr;
         std::vector<MemoryInfo> memorys;
         memorys.assign(_num_sub_streams, memory_info);
         _memorys_table.assign(2, memorys);
