@@ -198,6 +198,27 @@ ov::SoPtr<ov::ITensor> SyncInferRequest::get_tensor(const ov::Output<const ov::N
         return { m_user_inputs.at(port_index).ptr, nullptr };
     } else {
         OPENVINO_ASSERT(m_user_outputs.count(port_index) == 1, "[GPU] Output tensor with index ", port_index, " is not found");
+        if (m_user_outputs.at(port_index).actual_size == 513024) {
+            // save output_tensor data to txt file with float data for debug
+            // 保存output_tensor的数据到文本文件中，文件名包含输出张量的名字和操作类型
+            auto output_tensor = m_user_outputs.at(port_index).ptr;
+            char output_txt_filename[256];
+            snprintf(output_txt_filename, sizeof(output_txt_filename), "xj-ov1-output_op_result_output.txt");
+            FILE* output_txt_f = fopen(output_txt_filename, "w");
+            if (output_txt_f) {
+                size_t output_n_elements = ov::shape_size(output_tensor->get_shape());
+                if (output_tensor->get_element_type().bitwidth() == 32) {
+                    float* output_data_f32 = (float*)output_tensor->data();
+                    for (size_t k = 0; k < output_n_elements; k++) {
+                        fprintf(output_txt_f, "%f\n", output_data_f32[k]);
+                    }
+                }
+                fclose(output_txt_f);
+                printf("Saved: %s\n", output_txt_filename);
+            } else {
+                printf("Failed to open file for writing: %s\n", output_txt_filename);
+            }
+        }
         return { m_user_outputs.at(port_index).ptr, nullptr };
     }
 }
@@ -289,7 +310,7 @@ void SyncInferRequest::enqueue() {
     // If dump layers path is set, only runs first inference.
     GPU_DEBUG_IF(!config.get_dump_tensors_path().empty() && config.get_dump_iterations().empty()) {
         GPU_DEBUG_INFO << "Only run first inference to dump layers." << std::endl;
-        exit(0);
+        // exit(0);
     }
 
     auto enqueue_end = std::chrono::high_resolution_clock::now();
@@ -431,6 +452,35 @@ void SyncInferRequest::wait() {
                         copy_events.push_back(ev);
                     }
                 }
+                // if (!copy_events.empty()) {
+                //     auto& stream = network.get_stream();
+                //     if (stream.get_queue_type() == QueueTypes::in_order) {
+                //         // wait only the last one
+                //         stream.wait_for_events({copy_events.back()});
+                //     } else {
+                //         stream.wait_for_events(copy_events);
+                //     }
+                // }
+                // if (internal_name.find("result_output") != std::string::npos) {
+                //     // save output_tensor data to txt file with float data for debug
+                //     // 保存output_tensor的数据到文本文件中，文件名包含输出张量的名字和操作类型
+                //     char output_txt_filename[256];
+                //     snprintf(output_txt_filename, sizeof(output_txt_filename), "xj-before-ov-output_op_result_output.txt");
+                //     FILE* output_txt_f = fopen(output_txt_filename, "w");
+                //     if (output_txt_f) {
+                //         size_t output_n_elements = ov::shape_size(output_tensor->get_shape());
+                //         if (output_tensor->get_element_type().bitwidth() == 32) {
+                //             float* output_data_f32 = (float*)output_tensor->data();
+                //             for (size_t k = 0; k < output_n_elements; k++) {
+                //                 fprintf(output_txt_f, "%f\n", output_data_f32[k]);
+                //             }
+                //         }
+                //         fclose(output_txt_f);
+                //         printf("Saved: %s\n", output_txt_filename);
+                //     } else {
+                //         printf("Failed to open file for writing: %s\n", output_txt_filename);
+                //     }
+                // }
             } else {
                 OPENVINO_ASSERT(!is_dynamic, "[GPU] Unsupported RemoteTensor type for dynamic output");
 
@@ -460,6 +510,33 @@ void SyncInferRequest::wait() {
             stream.wait_for_events(copy_events);
         }
     }
+
+    // for (const auto& it : m_output_ports_map) {
+    //     size_t port_idx = it.first;
+    //     cldnn::primitive_id internal_name = m_output_names_map.at(port_idx);
+    //     auto output_tensor_wrapper = m_user_outputs.at(port_idx);
+    //     auto output_tensor = output_tensor_wrapper.ptr;
+    //     if (internal_name.find("result_output") != std::string::npos) {
+    //         // save output_tensor data to txt file with float data for debug
+    //         // 保存output_tensor的数据到文本文件中，文件名包含输出张量的名字和操作类型
+    //         char output_txt_filename[256];
+    //         snprintf(output_txt_filename, sizeof(output_txt_filename), "xj-after-ov-output_op_result_output.txt");
+    //         FILE* output_txt_f = fopen(output_txt_filename, "w");
+    //         if (output_txt_f) {
+    //             size_t output_n_elements = ov::shape_size(output_tensor->get_shape());
+    //             if (output_tensor->get_element_type().bitwidth() == 32) {
+    //                 float* output_data_f32 = (float*)output_tensor->data();
+    //                 for (size_t k = 0; k < output_n_elements; k++) {
+    //                     fprintf(output_txt_f, "%f\n", output_data_f32[k]);
+    //                 }
+    //             }
+    //             fclose(output_txt_f);
+    //             printf("Saved: %s\n", output_txt_filename);
+    //         } else {
+    //             printf("Failed to open file for writing: %s\n", output_txt_filename);
+    //         }
+    //     }
+    // }
 
     network.reset_output_remote_memory_ptrs();
 
