@@ -797,7 +797,8 @@ static void build_sdpa_param_mapping(HostFlashAttention& hfa,
     };
 
     // Extract Q (query) parameter - input 0 of MatMul1
-    if (auto q_param = extract_param(pattern_nodes.matmul1_node->get_input_node_shared_ptr(0))) {
+    auto q_input_node = pattern_nodes.matmul1_node->get_input_node_shared_ptr(0);
+    if (auto q_param = extract_param(q_input_node)) {
         hfa._query_param_idx = model->get_parameter_index(q_param);
     }
 
@@ -1328,6 +1329,55 @@ void PositionIDs::prepare(int64_t past_len) {
 }
 
 int64_t PositionIDs::context_length() const {
+    return _query_size + _past_length;
+}
+
+ExplicitHistory::ExplicitHistory(std::size_t param_idx,
+                                 std::size_t query_size,
+                                 const ov::ISyncInferRequest& rq)
+    : _history_idx(param_idx),
+      _query_size(query_size),
+      _rq(rq) {
+    _case = _query_size == 1 ? Case::GENERATE : Case::PREFILL;
+}
+
+Selector::Ptr ExplicitHistory::find(std::size_t query_size,
+                                    const std::string& input_name,
+                                    const ov::ISyncInferRequest& rq) {
+    if (input_name.empty()) {
+        return {};
+    }
+    const auto& inputs = rq.get_inputs();
+    const auto input = std::find_if(inputs.begin(), inputs.end(), [&](const auto& port) {
+        const auto& names = port.get_names();
+        return names.count(input_name) != 0 || port.get_node()->get_friendly_name() == input_name;
+    });
+    if (input == inputs.end()) {
+        return {};
+    }
+    return Selector::Ptr{new ExplicitHistory(std::distance(inputs.begin(), input), query_size, rq)};
+}
+
+void ExplicitHistory::prepare(int64_t past_len) {
+    const auto& port = _rq.get().get_compiled_model()->inputs()[_history_idx];
+    const auto tensor = _rq.get().get_tensor(port);
+    OPENVINO_ASSERT(tensor->get_size() > 0, "HFA explicit history input must not be empty");
+    if (tensor->get_element_type() == ov::element::i64) {
+        _past_length = tensor->data<int64_t>()[0];
+    } else if (tensor->get_element_type() == ov::element::i32) {
+        _past_length = tensor->data<int32_t>()[0];
+    } else {
+        OPENVINO_THROW("HFA explicit history input must have i32 or i64 element type");
+    }
+    OPENVINO_ASSERT(_past_length >= 0, "HFA explicit history size cannot be negative");
+    OPENVINO_ASSERT(_past_length == past_len,
+                    "HFA explicit history input does not match request history size: ",
+                    _past_length,
+                    " vs ",
+                    past_len);
+}
+
+int64_t ExplicitHistory::context_length() const {
     return _query_size + _past_length;
 }
 

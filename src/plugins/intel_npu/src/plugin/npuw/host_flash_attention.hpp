@@ -476,6 +476,22 @@ public:
     static Selector::Ptr find(std::size_t query_size, const ov::ISyncInferRequest& rq);
 };
 
+class ExplicitHistory final : public Selector {
+    std::size_t _history_idx = 0u;
+    int64_t _past_length = 0;
+    std::size_t _query_size = 0u;
+    std::reference_wrapper<const ov::ISyncInferRequest> _rq;
+
+    ExplicitHistory(std::size_t param_idx, std::size_t query_size, const ov::ISyncInferRequest& rq);
+    void prepare(int64_t past_len) override;
+    int64_t context_length() const override;
+
+public:
+    static Selector::Ptr find(std::size_t query_size,
+                              const std::string& input_name,
+                              const ov::ISyncInferRequest& rq);
+};
+
 }  // namespace host_flash_attention
 }  // namespace runtime
 

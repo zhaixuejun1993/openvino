@@ -188,7 +188,11 @@ void ensure_hfa_selector(ov::npuw::v1::subgraphs::InferContext& ctx, RuntimeStat
 
     auto& request = get_request(ctx);
     const size_t query_size = hfa->_sdpa_attention_info._query_size;
-    state.hfa_selector = runtime::host_flash_attention::PositionIDs::find(query_size, request);
+    state.hfa_selector = runtime::host_flash_attention::ExplicitHistory::find(
+        query_size, ctx.compiled_model.attention_history_size_input(), request);
+    if (!state.hfa_selector) {
+        state.hfa_selector = runtime::host_flash_attention::PositionIDs::find(query_size, request);
+    }
     if (!state.hfa_selector) {
         OPENVINO_THROW("HFA dynamic capability is enabled, but no run-time features were found.");
     }
@@ -938,7 +942,7 @@ ov::npuw::v1::subgraphs::RuntimeBehaviorFactory make_runtime_factory() {
                         }
 
                         regular_tile_request->set_tensor(hfa_desc->_compiled_tile_model->inputs()[tile_in.q],
-                                                         query_tensor);
+                                         query_tensor);
                         final_tile_request->set_tensor(hfa_desc->_compiled_final_tile_model->inputs()[tile_in.q],
                                                        query_tensor);
                         regular_tile_request->set_tensor(hfa_desc->_compiled_tile_model->outputs()[tile_out.acc],
@@ -954,7 +958,7 @@ ov::npuw::v1::subgraphs::RuntimeBehaviorFactory make_runtime_factory() {
                         final_tile_request->set_tensor(hfa_desc->_compiled_final_tile_model->inputs()[tile_in.d],
                                                        state_sum);
                         final_tile_request->set_tensor(hfa_desc->_compiled_final_tile_model->outputs()[0],
-                                                       attention_output_tensor);
+                                           attention_output_tensor);
 
                         const uint32_t K_SEQ_DIM = static_cast<uint32_t>(sdpa_info._k_seq_dim);
                         const uint32_t V_SEQ_DIM = static_cast<uint32_t>(sdpa_info._v_seq_dim);
