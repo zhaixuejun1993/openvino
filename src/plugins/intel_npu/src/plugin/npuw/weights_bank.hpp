@@ -61,6 +61,11 @@ private:
     struct DeviceBank {
         std::unordered_map<int64_t, StoredTensor> storage;
         std::unordered_map<LazyTensor, int64_t, LazyTensor::Hash> registered_tensors;
+        // Content-addressed index (opt-in via NPUW_SHARED_BANK_CONTENT_DEDUP). Maps a byte-content
+        // hash to uids of resident tensors carrying that content, so a later uid holding identical
+        // weights (e.g. an unfolded decode blob vs a folded prefill blob that share one bank name)
+        // aliases the existing device allocation instead of duplicating it on import.
+        std::unordered_multimap<uint64_t, int64_t> content_index;
     };
     std::unordered_map<std::string, DeviceBank> m_device_banks;
 

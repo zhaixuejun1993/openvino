@@ -4,6 +4,7 @@
 
 #include "weights_bank.hpp"
 
+#include <cstdlib>
 #include <cstring>
 
 #include "logging.hpp"
@@ -26,6 +27,41 @@ bool tensors_equal(const ov::Tensor& a, const ov::Tensor& b) {
         return false;
     }
     return std::memcmp(a.data(), b.data(), a.get_byte_size()) == 0;
+}
+
+// Opt-in content-addressed dedup for shared weights banks. When enabled, read_and_add_tensor
+// aliases a new uid to an already-resident tensor of identical content instead of allocating a
+// second copy. This is what lets a folded prefill blob and an unfolded decode blob (whose weight
+// uids differ) share a single resident weights copy. Default off -> original per-uid behavior.
+bool content_dedup_enabled() {
+    static const bool enabled = []() {
+        const char* e = std::getenv("NPUW_SHARED_BANK_CONTENT_DEDUP");
+        return e != nullptr && std::atoi(e) != 0;
+    }();
+    return enabled;
+}
+
+// FNV-1a over element type, shape and raw bytes. A collision only costs an extra byte-exact
+// tensors_equal() verification before aliasing, so the hash is used purely as an index key.
+uint64_t tensor_content_hash(const ov::Tensor& t) {
+    uint64_t h = 1469598103934665603ULL;
+    auto mix = [&h](const void* p, size_t n) {
+        const auto* b = static_cast<const uint8_t*>(p);
+        for (size_t i = 0; i < n; ++i) {
+            h ^= b[i];
+            h *= 1099511628211ULL;
+        }
+    };
+    const std::string et = t.get_element_type().get_type_name();
+    mix(et.data(), et.size());
+    for (auto d : t.get_shape()) {
+        uint64_t dd = static_cast<uint64_t>(d);
+        mix(&dd, sizeof(dd));
+    }
+    if (t && t.get_byte_size() > 0) {
+        mix(t.data(), t.get_byte_size());
+    }
+    return h;
 }
 }  // namespace
 
@@ -270,6 +306,40 @@ void Bank::read_and_add_tensor(ov::npuw::orc::Stream& stream, int64_t uid, const
         }
         NPUW_ASSERT(tensors_equal(iter_device->second.tensor, incoming) &&
                     "NPUW shared weights bank: uid collision with mismatched tensor content");
+        return;
+    }
+
+    if (content_dedup_enabled()) {
+        // Read the incoming weights into a plain host staging tensor, then try to alias it to an
+        // already-resident bank tensor of identical content (regardless of uid). This lets blobs
+        // with structurally different uids (e.g. folded prefill vs unfolded decode) share one
+        // resident weights copy. On a content miss we keep this tensor and index it.
+        ov::Tensor incoming;
+        transfer_tensor(stream, incoming);
+        const uint64_t h = tensor_content_hash(incoming);
+        auto range = device_bank.content_index.equal_range(h);
+        for (auto it = range.first; it != range.second; ++it) {
+            auto storage_it = device_bank.storage.find(it->second);
+            if (storage_it != device_bank.storage.end() && tensors_equal(storage_it->second.tensor, incoming)) {
+                ov::Tensor shared = storage_it->second.tensor;  // copy before storage[uid] may rehash
+                device_bank.storage[uid].tensor = shared;       // alias existing memory
+                device_bank.storage[uid].lt = LazyTensor();
+                return;
+            }
+        }
+
+        if (device == "CPU") {
+            device_bank.storage[uid].tensor = incoming;
+        } else {
+            auto remote_ctx = m_core->get_default_context(device)._ptr;
+            ov::SoPtr<ov::ITensor> remote_tensor =
+                remote_ctx->create_host_tensor(incoming.get_element_type(), incoming.get_shape());
+            ov::Tensor device_tensor = ov::make_tensor(remote_tensor);
+            incoming.copy_to(device_tensor);
+            device_bank.storage[uid].tensor = std::move(device_tensor);
+        }
+        device_bank.content_index.emplace(h, uid);
+        device_bank.storage[uid].lt = LazyTensor();
         return;
     }
 
